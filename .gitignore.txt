@@ -1,0 +1,13 @@
+# Игнорируем ненужное
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+*.spec
+.idea/
+__pycache__/
+*.log
+
+# Оставляем только важное
+!assets/
