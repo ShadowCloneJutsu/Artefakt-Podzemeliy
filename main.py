@@ -35,7 +35,6 @@ def load_animation(path, frame_width, frame_height, frame_count):
         textures = [arcade.make_soft_square_texture(frame_width, arcade.color.BLUE, 255, 255)]
     return textures
 
-#хранения прямоугольников
 class SimpleRect:
     def __init__(self, x, y, width, height):
         self.x = x
@@ -46,7 +45,7 @@ class SimpleRect:
     def contains(self, px, py):
         return self.x <= px <= self.x + self.width and self.y <= py <= self.y + self.height
 
-#ИГРОК
+# ========== ИГРОК ==========
 class Player(arcade.Sprite):
     def __init__(self):
         super().__init__()
@@ -141,11 +140,11 @@ class Player(arcade.Sprite):
             self.texture = textures[self.current_texture_index]
 
     def attack(self):
-        if self.state not in ("DEAD", "ATTACKING") and self.attack_sounds and self.can_speak:
+        if self.state not in ("DEAD", "ATTACKING"):
             self.state = "ATTACKING"
             self.current_texture_index = 0
             self.attack_timer = 0.5
-            if self.can_hear:
+            if self.can_speak and self.can_hear and self.attack_sounds:
                 arcade.play_sound(random.choice(self.attack_sounds))
             return True
         return False
@@ -189,11 +188,12 @@ class Player(arcade.Sprite):
         if self.invincible_timer > 0 and int(self.invincible_timer * 10) % 2 == 0:
             self.alpha = 128
 
-#ВРАГ
+# ========== ВРАГ ==========
 class Enemy(arcade.Sprite):
     def __init__(self, x, y, slime_type):
         super().__init__()
         self.damage = 1
+        self.health = 3
         self.attack_cooldown = 0.0
 
         filename = f"{slime_type}_Jump.png"
@@ -223,13 +223,13 @@ class Enemy(arcade.Sprite):
             self.attack_cooldown -= delta_time
 
     def take_damage(self, damage):
-        self.health = getattr(self, 'health', 3) - damage
+        self.health -= damage
         if self.health <= 0:
             self.kill()
             return True
         return False
 
-#ПРЕДМЕТЫ
+# ========== ПРЕДМЕТЫ ==========
 class Coin(arcade.Sprite):
     def __init__(self, x, y):
         super().__init__()
@@ -259,7 +259,7 @@ class HealthPickup(arcade.Sprite):
         self.scale = 2.0
         self.heal_amount = 1
 
-#ТОРГОВЕЦ
+# ========== ТОРГОВЕЦ ==========
 class Merchant(arcade.Sprite):
     def __init__(self, x, y):
         super().__init__()
@@ -282,7 +282,7 @@ class Tent(arcade.Sprite):
         self.center_y = y
         self.scale = 1.0
 
-#ОСНОВНОЙ ВИД
+# ========== ОСНОВНОЙ ВИД ==========
 class GameView(arcade.View):
     def __init__(self):
         super().__init__()
@@ -298,6 +298,7 @@ class GameView(arcade.View):
         self.heart_full = None
         self.heart_empty = None
         self.game_over = False
+        self.victory = False
 
         self.merchant = None
         self.tent = None
@@ -331,6 +332,7 @@ class GameView(arcade.View):
 
     def setup(self):
         self.game_over = False
+        self.victory = False
         self.camera = arcade.Camera2D()
         self.wall_list = arcade.SpriteList(use_spatial_hash=True)
         self.enemy_list = arcade.SpriteList()
@@ -340,7 +342,7 @@ class GameView(arcade.View):
         self.background_list = arcade.SpriteList()
         self.shop_sprites = arcade.SpriteList()
 
-        #ФОН
+        # ФОН
         try:
             bg_tex = arcade.load_texture(get_asset("Backgrounds", "Background_Cave", "background_Cave.png"))
             bg_sprite = arcade.Sprite(bg_tex)
@@ -352,7 +354,7 @@ class GameView(arcade.View):
         except:
             pass
 
-        #Сердца
+        # Сердца
         try:
             self.heart_full = arcade.load_texture(get_asset("Icons", "Icon_Heart_1.png"))
         except:
@@ -362,7 +364,7 @@ class GameView(arcade.View):
         except:
             self.heart_empty = None
 
-        #Товары
+        # Товары
         try:
             self.hands_icon = arcade.load_texture(get_asset("buy", "hands.png"))
         except:
@@ -401,7 +403,7 @@ class GameView(arcade.View):
         self.coin_list.clear()
         self.item_list.clear()
 
-        #Зона торговца
+        # Зона торговца (слева)
         for x in range(-800 + TILE_SIZE//2, 0, TILE_SIZE):
             try:
                 tex = arcade.load_texture(get_asset("buy", "Dirt-Grass.png"))
@@ -426,7 +428,7 @@ class GameView(arcade.View):
             tile_left.visible = False
             self.wall_list.append(tile_left)
 
-        #Переходная зона (0‑200)
+        # Переходная зона (0‑200)
         for x in range(TILE_SIZE//2, 200, TILE_SIZE):
             try:
                 tex = arcade.load_texture(get_asset("Tile Sets", "Dirt.png"))
@@ -437,7 +439,7 @@ class GameView(arcade.View):
             tile.center_y = TILE_SIZE // 2
             self.wall_list.append(tile)
 
-        #Основной уровень (200‑3000)
+        # Основной уровень (200‑3000)
         floor_tops = []
         x = 200
         gap_counter = 0
@@ -501,7 +503,6 @@ class GameView(arcade.View):
                 ey = py + TILE_SIZE + 32
                 self.enemy_list.append(Enemy(ex, ey, random.choice(enemy_types)))
 
-        #Спавн монет
         for _ in range(45):
             if random.random() < 0.6 and floor_tops:
                 fx, top = random.choice(floor_tops)
@@ -513,12 +514,6 @@ class GameView(arcade.View):
                 cy = py + TILE_SIZE + 24
             else:
                 continue
-            self.coin_list.append(Coin(cx, cy))
-
-        #Дополнительные монетки в зоне торговца
-        for _ in range(5):
-            cx = random.randint(-750, -50)
-            cy = TILE_SIZE + 20
             self.coin_list.append(Coin(cx, cy))
 
         for _ in range(5):
@@ -535,15 +530,21 @@ class GameView(arcade.View):
             tile_right.visible = False
             self.wall_list.append(tile_right)
 
+        # Монетки в зоне торговца
+        for _ in range(5):
+            cx = random.randint(-750, -50)
+            cy = TILE_SIZE + 20
+            self.coin_list.append(Coin(cx, cy))
+
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK)
 
     def on_draw(self):
         self.clear()
-        #Фон
+        # Фон
         self.window.default_camera.use()
         self.background_list.draw()
-        #Мир
+        # Мир
         self.camera.use()
         self.shop_sprites.draw()
         self.wall_list.draw()
@@ -552,17 +553,19 @@ class GameView(arcade.View):
         self.enemy_list.draw()
         self.player_list.draw()
         # Подсказка "E"
-        if self.merchant and not self.shop_open:
+        if self.merchant and not self.shop_open and not self.victory:
             dist = math.hypot(self.player.center_x - self.merchant.center_x,
                               self.player.center_y - self.merchant.center_y)
             if dist < 80:
                 arcade.Text("Нажми E", self.merchant.center_x, self.merchant.center_y + 40,
                             arcade.color.WHITE, 14, anchor_x="center").draw()
-        #UI
+        # UI
         self.window.default_camera.use()
         self.draw_ui()
         if self.game_over:
             self.draw_game_over()
+        elif self.victory:
+            self.draw_victory()
         if self.shop_open:
             self.draw_shop_gui()
 
@@ -586,11 +589,19 @@ class GameView(arcade.View):
         arcade.Text("Нажми R для перезапуска", WIDTH//2, HEIGHT//2 - 40,
                     arcade.color.WHITE, 16, anchor_x="center", anchor_y="center").draw()
 
+    def draw_victory(self):
+        arcade.draw_rect_filled(arcade.rect.XYWH(WIDTH//2, HEIGHT//2, 400, 200), (0, 0, 0, 200))
+        arcade.Text("VICTORY", WIDTH//2, HEIGHT//2 + 40, arcade.color.GREEN, 36,
+                    anchor_x="center", anchor_y="center").draw()
+        arcade.Text(f"Все враги повержены!", WIDTH//2, HEIGHT//2,
+                    arcade.color.WHITE, 20, anchor_x="center", anchor_y="center").draw()
+        arcade.Text("Нажми R для перезапуска", WIDTH//2, HEIGHT//2 - 40,
+                    arcade.color.WHITE, 16, anchor_x="center", anchor_y="center").draw()
+
     def draw_shop_gui(self):
         arcade.draw_rect_filled(arcade.rect.XYWH(WIDTH/2, HEIGHT/2, 400, 300), (0, 0, 0, 200))
         arcade.Text("Торговец", WIDTH/2, HEIGHT/2 + 130, arcade.color.WHITE, 24, anchor_x="center", anchor_y="center").draw()
 
-        #Кнопки SimpleRect
         btn_hands = SimpleRect(WIDTH/2 - 150, HEIGHT/2 + 40, 120, 40)
         arcade.draw_rect_filled(arcade.rect.XYWH(btn_hands.x + btn_hands.width/2, btn_hands.y + btn_hands.height/2, btn_hands.width, btn_hands.height), arcade.color.DARK_GREEN)
         arcade.Text("Руки 5", WIDTH/2 - 90, HEIGHT/2 + 60, arcade.color.WHITE, 14, anchor_x="center", anchor_y="center").draw()
@@ -627,7 +638,7 @@ class GameView(arcade.View):
         arcade.Text(f"Ваши монеты: {self.player.coins}", WIDTH/2, HEIGHT/2 - 100, arcade.color.GOLD, 14, anchor_x="center").draw()
 
     def on_update(self, delta_time):
-        if self.game_over or self.shop_open:
+        if self.game_over or self.shop_open or self.victory:
             return
 
         if self.player.state == "DEAD":
@@ -640,13 +651,29 @@ class GameView(arcade.View):
         self.player.update(delta_time)
         self.camera.position = (self.player.center_x, HEIGHT // 2)
 
+        # Враги и атака
         for enemy in self.enemy_list:
             enemy.update(delta_time, self.player)
             if self.player.state == "ATTACKING" and 0.2 < self.player.attack_timer < 0.4:
-                if arcade.check_for_collision(self.player, enemy):
+                attack_width = 50
+                attack_height = 40
+                if self.player.facing_right:
+                    attack_x = self.player.center_x + 30
+                else:
+                    attack_x = self.player.center_x - 30
+                # Прямая проверка столкновений без Rect
+                if (abs(attack_x - enemy.center_x) < attack_width/2 + enemy.width/2 and
+                    abs(self.player.center_y - enemy.center_y) < attack_height/2 + enemy.height/2):
                     if enemy.take_damage(self.player.attack_damage):
                         self.coin_list.append(Coin(enemy.center_x, enemy.center_y))
+                        print("Враг получил урон!")
 
+        # Проверка победы
+        if len(self.enemy_list) == 0:
+            self.victory = True
+            return
+
+        # Монетки
         self.coin_list.update()
         coins_hit = arcade.check_for_collision_with_list(self.player, self.coin_list)
         for coin in coins_hit:
@@ -655,6 +682,7 @@ class GameView(arcade.View):
                 arcade.play_sound(self.coin_sound)
             coin.kill()
 
+        # Хилки
         self.item_list.update()
         items_hit = arcade.check_for_collision_with_list(self.player, self.item_list)
         for item in items_hit:
@@ -669,7 +697,7 @@ class GameView(arcade.View):
             self.player.state = "DEAD"
 
     def on_key_press(self, key, modifiers):
-        if self.game_over:
+        if self.game_over or self.victory:
             if key == arcade.key.R:
                 self.setup()
             return
@@ -721,7 +749,7 @@ class GameView(arcade.View):
                     elif btn_name == 'exit':
                         self.shop_open = False
                     break
-        elif not self.game_over and self.player.state != "DEAD":
+        elif not self.game_over and not self.victory and self.player.state != "DEAD":
             if button == arcade.MOUSE_BUTTON_LEFT:
                 self.player.attack()
 
